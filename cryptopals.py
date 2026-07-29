@@ -17,8 +17,14 @@ is_pkcs7_padded = lambda b: all(i == b[-1] for i in b[-b[-1]:]) if len(b) else 0
 pkcs7_unpad = lambda b: b[:-b[-1]] if is_pkcs7_padded(b) else b
 aes_cbc_encrypt = lambda p, k, iv=b"\0"*16, bs=16: b"".join(iv := aes_ecb(xor(p[i:i+bs], iv), k, 'e') for i in range(0, len(p), bs))
 aes_cbc_decrypt = lambda c, k, iv=b"\0"*16, bs=16: b"".join(xor(iv, aes_ecb(iv := c[i:i+bs], k, 'd')) for i in range(0, len(c), bs))
+urandom, rndbit = None, lambda s=[0, 0]: (None if s[1] else s.__setitem__(0, urandom.read(1)[0]) or s.__setitem__(1, 8)) or s.__setitem__(1, s[1] - 1) or (s[0] >> s[1]) & 1
+rnd, rndbits = lambda n = 16: urandom.read(n), lambda n: sum(rndbit() << i for i in range(n))
+aes_oracle = lambda b, bs=16: (aes_ecb(b, rnd() ,'e'), 1) if (b := rnd(6+rndbits(2)) + b + rnd(6+rndbits(2)), rndbit())[1] else (aes_cbc_encrypt(b, rnd(), rnd(), bs), 0)
+is_ecb = lambda b, bs=16: len({b[i:i+bs] for i in range(0, len(b), bs)}) < len(b) // bs
 
 if __name__ == "__main__":
+
+    urandom = open("/dev/urandom", "rb")
 
     with open("out.txt", "rb") as f:
         out = f.read()
@@ -61,7 +67,7 @@ if __name__ == "__main__":
     # 6
     assert hamming(b"this is a test", b"wokka wokka!!!") == 37
     with open("6.txt", "rb") as f:
-        assert (lambda x, y, z: break_repeatingkey_xor(x) == y and rxor(x, y) == z)(
+        assert (lambda x, y, z: break_repeatingkey_xor(x) == y and rxor(x, y) == z) (
             b64f(f), b"Terminator X: Bring the noise", out
         )
 
@@ -86,3 +92,7 @@ if __name__ == "__main__":
     # 10
     with open("10.txt", "rb") as f:
         assert pkcs7_unpad(aes_cbc_decrypt(b64f(f), b"YELLOW SUBMARINE")) == out
+
+    # 11
+    for _ in range(1000):
+        assert (lambda x, y: y == is_ecb(x)) (*aes_oracle(64 * b"\0"))
