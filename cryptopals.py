@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import cryptography.hazmat.primitives.ciphers as crypto
-A, D = (lambda x: (x, dict(zip(x, range(64))) | {61: 0}))(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+D = dict(zip(A := b"".join(map(lambda x:bytes(range(*x)),zip(b"Aa0+/",b"[{:,0"))), range(64))) | {61: 0}
 b64e = lambda b: b"".join(map(lambda x: bytes(A[int.from_bytes(b[x: x + 3]) >> 6 * i & 63] for i in range(4)[::-1]), range(0, len(b :=  b + (m := -len(b) % 3) * b"\0"), 3)))[:-m or None] + m * b"="
 b64d, b64f = lambda s: b"".join(sum(D[x[i]]<<6*(3-i)for i in range(4)).to_bytes(3)for x in zip(*(s[i::4]for i in range(4)),strict=1))[:-s.count(61)or None], lambda f: b64d(b"".join(f.read().split()))
 xor, rxor = lambda x, y: bytes(i ^ j for i, j in zip(x, y)), lambda b, k: bytes(b[i] ^ k[i % len(k)] for i in range(len(b)))
@@ -17,14 +17,12 @@ is_pkcs7_padded = lambda b: all(i == b[-1] for i in b[-b[-1]:]) if len(b) else 0
 pkcs7_unpad = lambda b: b[:-b[-1]] if is_pkcs7_padded(b) else b
 aes_cbc_encrypt = lambda p, k, iv=b"\0"*16, bs=16: b"".join(iv := aes_ecb(xor(p[i:i+bs], iv), k, 'e') for i in range(0, len(p), bs))
 aes_cbc_decrypt = lambda c, k, iv=b"\0"*16, bs=16: b"".join(xor(iv, aes_ecb(iv := c[i:i+bs], k, 'd')) for i in range(0, len(c), bs))
-urandom, rndbit = None, lambda s=[0, 0]: (None if s[1] else s.__setitem__(0, urandom.read(1)[0]) or s.__setitem__(1, 8)) or s.__setitem__(1, s[1] - 1) or (s[0] >> s[1]) & 1
-rnd, rndbits = lambda n = 16: urandom.read(n), lambda n: sum(rndbit() << i for i in range(n))
-aes_oracle = lambda b, bs=16: (aes_ecb(b, rnd() ,'e'), 1) if (b := rnd(6+rndbits(2)) + b + rnd(6+rndbits(2)), rndbit())[1] else (aes_cbc_encrypt(b, rnd(), rnd(), bs), 0)
+rnd, rndbit = lambda n=1, s=[]: (s or s.append(open("/dev/urandom","rb"))or s)[0].read(n), lambda s=bytearray(b"\0\0"): (si:=s.__setitem__)(0,s[0]>>1 if s[1]else rnd()[0])or si(1,(s[1]-1)&7)or s[0]&1
+rndbits, rndint = lambda n: sum(rndbit() << i for i in range(n)), lambda*x: range(*x)[b] if (b:=rndbits((len(range(*x))-1).bit_length()))<len(range(*x))+0*range(*x)[0] else rndint(*x)
+aes_oracle = lambda b, bs=16: (aes_ecb(b, k, 'e'), 1) if (b := rnd(rndint(5,11)) + b + rnd(rndint(5,11)), k := rnd(16), rndbit())[1] else (aes_cbc_encrypt(b, k, rnd(16), bs), 0)
 is_ecb = lambda b, bs=16: len({b[i:i+bs] for i in range(0, len(b), bs)}) < len(b) // bs
 
 if __name__ == "__main__":
-
-    urandom = open("/dev/urandom", "rb")
 
     with open("out.txt", "rb") as f:
         out = f.read()
