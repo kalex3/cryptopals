@@ -11,24 +11,21 @@ hamming = lambda x, y: sum(int.bit_count(i) for i in xor(x, y))
 break_repeatingkey_xor = lambda c, r=range(2,41): b"".join(map(lambda i: break_singlebyte_xor(c[i::k]), range(k := min((sum(hamming(c[i:i+k], c[i+k:i+2*k]) for i in range(100))/k, k) for k in r)[1])))
 I = bytes(sorted(S := b64d(b"Y3x3e/Jrb8UwAWcr/terdsqCyX36WUfwrdSir5ykcsC3/ZMmNj/3zDSl5fFx2DEVBMcjwxiWBZoHEoDi6yeydQmDLBobblqgUjvWsynjL4RT0QDtIPyxW2rLvjlKTFjP0O+q+0NNM4VF+QJ/UDyfqFGjQI+SnTj1vLbaIRD/89"
 b"LNDBPsX5dEF8Snfj1kXRlzYIFP3CIqkIhG7rgU3l4L2+AyOgpJBiRcwtOsYpGV5HnnyDdtjdVOqWxW9Opleq4IunglLhymtMbo3XQfS72LinA+tWZIA/YOYTVXuYbBHZ7h+JgRadmOlJseh+nOVSjfjKGJDb/mQmhBmS0PsFS7Fg=="), key=S.__getitem__))
-detect_ecb = lambda c, bs=16: min((len({b[i:i+bs] for i in range(0, len(b), bs)}), b) for b in c)[1]
-pad, is_padded, unpad = lambda b, bs=16: b + (lambda x: x * bytes([x]))(bs - len(b) % bs), lambda b: all(i == b[-1] for i in b[-b[-1]:]) if len(b) else 0, lambda b: b[:-b[-1]] if is_padded(b) else b
-aes_cbc_encrypt = lambda p, k, iv=b"\0"*16, bs=16: b"".join(iv := aes_ecb_encrypt(xor(p[i:i+bs], iv), k) for i in range(0, len(p), bs))
-aes_cbc_decrypt = lambda c, k, iv=b"\0"*16, bs=16: b"".join(xor(iv, aes_ecb_decrypt(iv := c[i:i+bs], k)) for i in range(0, len(c), bs))
-rnd, rndbit = lambda n=1, s=[]: (s or s.append(open("/dev/urandom","rb"))or s)[0].read(n), lambda s=bytearray(b"\0\0"): (si:=s.__setitem__)(0,s[0]>>1 if s[1]else rnd()[0])or si(1,(s[1]-1)&7)or s[0]&1
-rndbits, rndint = lambda n: sum(rndbit() << i for i in range(n)), lambda*x: range(*x)[b] if (b:=rndbits((len(range(*x))-1).bit_length()))<len(range(*x))+0*range(*x)[0] else rndint(*x)
-aes_oracle = lambda b, bs=16: (aes_ecb_encrypt(b, k), 1) if (b := pad(rnd(rndint(5,11)) + b + rnd(rndint(5,11))), k := rnd(16), rndbit())[1] else (aes_cbc_encrypt(b, k, rnd(16), bs), 0)
-is_ecb = lambda b, bs=16: len({b[i:i+bs] for i in range(0, len(b), bs)}) < len(b) // bs
 xt, gm = lambda x: ((x << 1) ^ (283 if x & 128 else 0)) & 255, lambda a, b: (0, a)[b&1] ^ gm(xt(a), b>>1) if b else 0
 addkey, sub, shift = xor, lambda a, inv=0: bytes((S, I)[inv][x] for x in a), lambda a, inv=0: bytes(a[(((i >> 2) + (i, -i)[inv]) & 3) << 2 | (i & 3)] for i in range(16))
 mix = lambda a, inv=0, M=b"\2\3\1\1\x0e\v\r\t": bytes((lambda x, g=next: g(x)^g(x)^g(x)^g(x))(gm(M[(inv << 2) | ((j - i) & 3)], a[(i & 12) | j]) for j in range(4)) for i in range(16));
+keys = lambda k: (r:=1,l:=bytearray(k),[l.extend(xor(l[-16:-12],l[-4:]if i&3 else(S[l[-3]]^(r,r:=xt(r))[0],S[l[-2]],S[l[-1]],S[l[-4]])))for i in range(40)],[bytes(l[i<<4:(i+1)<<4])for i in range(11)])[-1]
 enc_block = lambda p, ks: (a := addkey(p, ks[0]), *(a := addkey(mix(shift(sub(a))), k) for k in ks[1:-1]), a:=addkey(shift(sub(a)),ks[-1]))[-1]
 dec_block = lambda p, ks: (a := addkey(p, ks[-1]), *(a := mix(addkey(shift(sub(a,1),1),k),1) for k in ks[-2:0:-1]), a:=addkey(shift(sub(a,1),1),ks[0]))[-1]
-aes_ecb_encrypt, aes_ecb_decrypt = map(lambda f: (lambda d, k: (ks:=keys(k), b"".join(f(d[i:i+16], ks) for i in range(len(d))[::16]))[1]), (enc_block, dec_block))
-def keys(k, r=1):
-    for i in range(40):
-        k += xor(k[-16:-12], k[-4:] if i & 3 else (S[k[-3]]^(r,r:=xt(r))[0],S[k[-2]],S[k[-1]],S[k[-4]]))
-    return [bytes(k[i<<4:(i+1)<<4]) for i in range(11)]
+ecb_encrypt, ecb_decrypt = map(lambda f: (lambda d, k: (ks:=keys(k), b"".join(f(d[i:i+16], ks) for i in range(len(d))[::16]))[1]), (enc_block, dec_block))
+detect_ecb = lambda c, bs=16: min((len({b[i:i+bs] for i in range(0, len(b), bs)}), b) for b in c)[1]
+pad, is_padded, unpad = lambda b, bs=16: b + (lambda x: x * bytes([x]))(bs - len(b) % bs), lambda b: all(i == b[-1] for i in b[-b[-1]:]) if len(b) else 0, lambda b: b[:-b[-1]] if is_padded(b) else b
+cbc_encrypt = lambda p, k, iv=b"\0"*16, bs=16: b"".join(iv := ecb_encrypt(xor(p[i:i+bs], iv), k) for i in range(0, len(p), bs))
+cbc_decrypt = lambda c, k, iv=b"\0"*16, bs=16: b"".join(xor(iv, ecb_decrypt(iv := c[i:i+bs], k)) for i in range(0, len(c), bs))
+ecb_distinguisher = lambda b, bs=16: len({b[i:i+bs] for i in range(0, len(b), bs)}) < len(b) // bs
+rnd, rndbit = lambda n=1, s=[]: (s or s.append(open("/dev/urandom","rb"))or s)[0].read(n), lambda s=bytearray(b"\0\0"): (si:=s.__setitem__)(0,s[0]>>1 if s[1]else rnd()[0])or si(1,(s[1]-1)&7)or s[0]&1
+rndbits, rndint = lambda n: sum(rndbit() << i for i in range(n)), lambda*x: range(*x)[b] if (b:=rndbits((len(range(*x))-1).bit_length()))<len(range(*x))+0*range(*x)[0] else rndint(*x)
+enc_oracle = lambda b, bs=16: (ecb_encrypt(b, k), 1) if (b := pad(rnd(rndint(5,11)) + b + rnd(rndint(5,11))), k := rnd(16), rndbit())[1] else (cbc_encrypt(b, k, rnd(16), bs), 0)
 
 if __name__ == "__main__":
 
@@ -79,7 +76,7 @@ if __name__ == "__main__":
 
     # 7
     with open("7.txt", "rb") as f:
-        assert aes_ecb_decrypt(b64f(f), b"YELLOW SUBMARINE") == out + b"\4\4\4\4"
+        assert ecb_decrypt(b64f(f), b"YELLOW SUBMARINE") == out + b"\4\4\4\4"
 
     # 8
     with open("8.txt", "rb") as f:
@@ -97,8 +94,8 @@ if __name__ == "__main__":
 
     # 10
     with open("10.txt", "rb") as f:
-        assert unpad(aes_cbc_decrypt(b64f(f), b"YELLOW SUBMARINE")) == out
+        assert unpad(cbc_decrypt(b64f(f), b"YELLOW SUBMARINE")) == out
 
     # 11
     for _ in range(1000):
-        assert (lambda x, y: y == is_ecb(x)) (*aes_oracle(64 * b"\0"))
+        assert (lambda x, y: y == ecb_distinguisher(x)) (*enc_oracle(64 * b"\0"))
